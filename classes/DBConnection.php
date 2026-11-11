@@ -70,7 +70,9 @@ class DBConnection{
                 echo "<li><code>DB_HOST</code>: " . htmlspecialchars($this->host) . "</li>";
                 echo "<li><code>DB_PORT</code>: " . htmlspecialchars((string)$this->port) . "</li>";
                 echo "<li><code>DB_USER</code>: " . htmlspecialchars($this->username) . "</li>";
+                echo "<li><code>DB_PASSWORD</code>: " . (!empty($this->password) ? "•••••••• (Set)" : "<span style='color:red;font-weight:bold;'>Missing / Empty</span>") . "</li>";
                 echo "<li><code>DB_NAME</code>: " . htmlspecialchars($this->database) . "</li>";
+                echo "<li><code>DB_SSL</code>: " . ($ssl_enabled ? "true" : "false") . "</li>";
                 echo "</ul>";
                 echo "<p>Or provide <code>DATABASE_URL</code> (e.g. <code>mysql://user:pass@host:port/dbname</code>).</p>";
                 echo "</div>";

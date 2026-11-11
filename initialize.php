@@ -35,11 +35,47 @@ if (getenv('DATABASE_URL')) {
     }
 }
 
-// Database Credentials from Environment or defaults
-if(!defined('DB_SERVER')) define('DB_SERVER', getenv('DB_HOST') ?: (getenv('DB_SERVER') ?: "localhost"));
-if(!defined('DB_PORT')) define('DB_PORT', getenv('DB_PORT') ?: 3306);
-if(!defined('DB_USERNAME')) define('DB_USERNAME', getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: "root"));
-if(!defined('DB_PASSWORD')) define('DB_PASSWORD', getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : "");
-if(!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: "mvogms_db");
-if(!defined('DB_SSL')) define('DB_SSL', getenv('DB_SSL') ? filter_var(getenv('DB_SSL'), FILTER_VALIDATE_BOOLEAN) : false);
+// Database Host
+if(!defined('DB_SERVER')) {
+    $host = getenv('DB_HOST') ?: (getenv('DB_SERVER') ?: (getenv('MYSQLHOST') ?: "localhost"));
+    define('DB_SERVER', $host);
+}
+
+// Database Port
+if(!defined('DB_PORT')) {
+    $port = getenv('DB_PORT') ?: (getenv('MYSQLPORT') ?: 3306);
+    define('DB_PORT', (int)$port);
+}
+
+// Database User
+if(!defined('DB_USERNAME')) {
+    $user = getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: (getenv('MYSQLUSER') ?: "root"));
+    define('DB_USERNAME', $user);
+}
+
+// Database Password
+if(!defined('DB_PASSWORD')) {
+    $pass = getenv('DB_PASSWORD');
+    if ($pass === false || $pass === '') $pass = getenv('DB_PASS');
+    if ($pass === false || $pass === '') $pass = getenv('MYSQLPASSWORD');
+    if ($pass === false || $pass === '') $pass = getenv('DB_PASSWD');
+    define('DB_PASSWORD', ($pass !== false) ? $pass : "");
+}
+
+// Database Name
+if(!defined('DB_NAME')) {
+    $name = getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: (getenv('MYSQLDATABASE') ?: "mvogms_db"));
+    define('DB_NAME', $name);
+}
+
+// Database SSL (Auto enable for Aiven and TiDB Cloud)
+if(!defined('DB_SSL')) {
+    $ssl_env = getenv('DB_SSL');
+    if ($ssl_env !== false && $ssl_env !== '') {
+        define('DB_SSL', filter_var($ssl_env, FILTER_VALIDATE_BOOLEAN));
+    } else {
+        $is_cloud = (strpos(DB_SERVER, 'aivencloud.com') !== false || strpos(DB_SERVER, 'tidbcloud.com') !== false);
+        define('DB_SSL', $is_cloud);
+    }
+}
 ?>
