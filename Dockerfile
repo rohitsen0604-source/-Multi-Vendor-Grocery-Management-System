@@ -10,11 +10,11 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) gd mysqli pdo pdo_mysql \
-    && a2enmod rewrite \
+    && a2enmod rewrite headers \
     && rm -rf /var/lib/apt/lists/*
 
-# Custom PHP settings for uploads and performance
-RUN printf 'upload_max_filesize = 50M\npost_max_size = 50M\nmemory_limit = 256M\nmax_execution_time = 300\ndate.timezone = Asia/Kolkata\n' > /usr/local/etc/php/conf.d/custom.ini
+# Custom PHP settings for uploads, performance, and clear error reporting
+RUN printf 'upload_max_filesize = 50M\npost_max_size = 50M\nmemory_limit = 256M\nmax_execution_time = 300\ndate.timezone = Asia/Kolkata\ndisplay_errors = On\ndisplay_startup_errors = On\nerror_reporting = E_ALL & ~E_NOTICE & ~E_DEPRECATED\n' > /usr/local/etc/php/conf.d/custom.ini
 
 # Configure Apache Directory permissions and AllowOverride for .htaccess
 RUN printf '\n<Directory /var/www/html>\n    Options Indexes FollowSymLinks\n    AllowOverride All\n    Require all granted\n</Directory>\n' >> /etc/apache2/apache2.conf
@@ -39,4 +39,3 @@ EXPOSE 80 10000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["apache2-foreground"]
-

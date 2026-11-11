@@ -61,9 +61,10 @@ class DBConnection{
             }
 
             if (!$connected) {
+                $err_msg = mysqli_connect_error() ?: ($this->conn->connect_error ?: 'Unknown connection error');
                 echo "<div style='font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:50px auto;padding:24px;border:1px solid #f5c6cb;background:#f8d7da;color:#721c24;border-radius:8px;line-height:1.6;'>";
                 echo "<h3 style='margin-top:0;'>⚠️ Database Connection Failed</h3>";
-                echo "<p><strong>Error:</strong> " . htmlspecialchars($this->conn->connect_error) . "</p>";
+                echo "<p><strong>Error:</strong> " . htmlspecialchars($err_msg) . "</p>";
                 echo "<p>Please ensure you have configured your database environment variables on Render:</p>";
                 echo "<ul>";
                 echo "<li><code>DB_HOST</code>: " . htmlspecialchars($this->host) . "</li>";
@@ -90,14 +91,27 @@ class DBConnection{
                 $sql_file = defined('base_app') ? base_app . 'database/mvogms_db.sql' : __DIR__ . '/../database/mvogms_db.sql';
                 if (file_exists($sql_file)) {
                     $sql_content = file_get_contents($sql_file);
-                    if ($this->conn->multi_query($sql_content)) {
-                        do {
-                            if ($res = $this->conn->store_result()) {
-                                $res->free();
-                            }
-                        } while ($this->conn->more_results() && $this->conn->next_result());
+                    $lines = explode("\n", $sql_content);
+                    $clean_sql = "";
+                    foreach ($lines as $line) {
+                        $trimmed = trim($line);
+                        if (str_starts_with($trimmed, "--") || str_starts_with($trimmed, "/*") || str_starts_with($trimmed, "SET SQL_MODE") || str_starts_with($trimmed, "START TRANSACTION") || str_starts_with($trimmed, "COMMIT;")) {
+                            continue;
+                        }
+                        $clean_sql .= $line . "\n";
+                    }
+
+                    $queries = explode(";\n", $clean_sql);
+                    foreach ($queries as $q) {
+                        $q = trim($q);
+                        if (!empty($q)) {
+                            @$this->conn->query($q);
+                        }
                     }
                 }
+            }
+            if ($check && is_object($check)) {
+                $check->free();
             }
         } catch (Throwable $e) {
             error_log("Auto-seed notice: " . $e->getMessage());

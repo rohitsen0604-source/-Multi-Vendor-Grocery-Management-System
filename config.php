@@ -14,10 +14,9 @@ function redirect($url=''){
 	if(!empty($url))
 	echo '<script>location.href="'.base_url .$url.'"</script>';
 }
-function validate_image($file){
-    $file = explode("?",$file)[0];
+function validate_image($file = ''){
+    $file = !empty($file) ? explode("?", $file)[0] : '';
 	if(!empty($file)){
-			// exit;
 		if(is_file(base_app.$file)){
 			return base_url.$file;
 		}else{
