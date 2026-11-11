@@ -39,3 +39,4 @@ EXPOSE 80 10000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["apache2-foreground"]
+
