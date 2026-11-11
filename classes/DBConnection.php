@@ -80,6 +80,7 @@ class DBConnection{
             }
 
             $this->conn->set_charset("utf8mb4");
+            @$this->conn->query("SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'");
 
             // Auto seed database if tables are missing
             $this->auto_seed_if_empty();
