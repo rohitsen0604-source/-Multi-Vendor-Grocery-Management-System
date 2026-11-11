@@ -194,7 +194,7 @@ class SystemSettings extends DBConnection{
 $_settings = new SystemSettings();
 $_settings->load_system_info();
 $action = !isset($_GET['f']) ? 'none' : strtolower($_GET['f']);
-$sysset = new SystemSettings();
+$sysset = $_settings;
 switch ($action) {
 	case 'update_settings':
 		echo $sysset->update_settings_info();

@@ -5,6 +5,9 @@ if(!defined('DB_SERVER')){
 
 class DBConnection{
 
+    private static $shared_conn = null;
+    private static $is_seeded = false;
+
     private $host;
     private $username;
     private $password;
@@ -14,107 +17,109 @@ class DBConnection{
     public $conn;
     
     public function __construct(){
+        // Reuse shared connection if available
+        if (self::$shared_conn !== null && is_object(self::$shared_conn) && @self::$shared_conn->ping()) {
+            $this->conn = self::$shared_conn;
+            return;
+        }
+
         $this->host = DB_SERVER;
         $this->username = DB_USERNAME;
         $this->password = DB_PASSWORD;
         $this->database = DB_NAME;
         $this->port = defined('DB_PORT') ? (int)DB_PORT : 3306;
 
-        if (!isset($this->conn)) {
-            mysqli_report(MYSQLI_REPORT_OFF);
+        mysqli_report(MYSQLI_REPORT_OFF);
 
-            $this->conn = mysqli_init();
-            if (!$this->conn) {
-                die("mysqli_init failed");
+        $this->conn = mysqli_init();
+        if (!$this->conn) {
+            die("mysqli_init failed");
+        }
+
+        $this->conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, 8);
+
+        $ssl_enabled = defined('DB_SSL') && DB_SSL;
+        if ($ssl_enabled) {
+            $this->conn->ssl_set(NULL, NULL, NULL, NULL, NULL);
+            if (defined('MYSQLI_OPT_SSL_VERIFY_SERVER_CERT')) {
+                $this->conn->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
             }
+        }
 
-            $this->conn->options(MYSQLI_OPT_CONNECT_TIMEOUT, 15);
+        $flags = ($ssl_enabled && defined('MYSQLI_CLIENT_SSL')) ? MYSQLI_CLIENT_SSL : 0;
+        $connected = @$this->conn->real_connect(
+            $this->host,
+            $this->username,
+            $this->password,
+            $this->database,
+            $this->port,
+            NULL,
+            $flags
+        );
 
-            $ssl_enabled = defined('DB_SSL') && DB_SSL;
-            if ($ssl_enabled) {
-                $this->conn->ssl_set(NULL, NULL, NULL, NULL, NULL);
-                if (defined('MYSQLI_OPT_SSL_VERIFY_SERVER_CERT')) {
-                    $this->conn->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, false);
-                }
-            }
-
-            $flags = ($ssl_enabled && defined('MYSQLI_CLIENT_SSL')) ? MYSQLI_CLIENT_SSL : 0;
+        if (!$connected && $ssl_enabled) {
+            // Fallback without SSL flag if provider allows plaintext
             $connected = @$this->conn->real_connect(
                 $this->host,
                 $this->username,
                 $this->password,
                 $this->database,
-                $this->port,
-                NULL,
-                $flags
+                $this->port
             );
+        }
 
-            // If SSL connection failed, fallback to regular connection
-            if (!$connected && $ssl_enabled) {
-                $connected = @$this->conn->real_connect(
-                    $this->host,
-                    $this->username,
-                    $this->password,
-                    $this->database,
-                    $this->port
-                );
-            }
+        if (!$connected) {
+            $err_msg = mysqli_connect_error() ?: ($this->conn->connect_error ?: 'Unknown connection error');
+            echo "<div style='font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:50px auto;padding:24px;border:1px solid #f5c6cb;background:#f8d7da;color:#721c24;border-radius:8px;line-height:1.6;'>";
+            echo "<h3 style='margin-top:0;'>⚠️ Database Connection Failed</h3>";
+            echo "<p><strong>Error:</strong> " . htmlspecialchars($err_msg) . "</p>";
+            echo "<p>Please ensure you have configured your database environment variables on Render:</p>";
+            echo "<ul>";
+            echo "<li><code>DB_HOST</code>: " . htmlspecialchars($this->host) . "</li>";
+            echo "<li><code>DB_PORT</code>: " . htmlspecialchars((string)$this->port) . "</li>";
+            echo "<li><code>DB_USER</code>: " . htmlspecialchars($this->username) . "</li>";
+            echo "<li><code>DB_PASSWORD</code>: " . (!empty($this->password) ? "•••••••• (Set)" : "<span style='color:red;font-weight:bold;'>Missing / Empty</span>") . "</li>";
+            echo "<li><code>DB_NAME</code>: " . htmlspecialchars($this->database) . "</li>";
+            echo "<li><code>DB_SSL</code>: " . ($ssl_enabled ? "true" : "false") . "</li>";
+            echo "</ul>";
+            echo "<p>Or provide <code>DATABASE_URL</code> (e.g. <code>mysql://user:pass@host:port/dbname</code>).</p>";
+            echo "</div>";
+            exit;
+        }
 
-            if (!$connected) {
-                $err_msg = mysqli_connect_error() ?: ($this->conn->connect_error ?: 'Unknown connection error');
-                echo "<div style='font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:50px auto;padding:24px;border:1px solid #f5c6cb;background:#f8d7da;color:#721c24;border-radius:8px;line-height:1.6;'>";
-                echo "<h3 style='margin-top:0;'>⚠️ Database Connection Failed</h3>";
-                echo "<p><strong>Error:</strong> " . htmlspecialchars($err_msg) . "</p>";
-                echo "<p>Please ensure you have configured your database environment variables on Render:</p>";
-                echo "<ul>";
-                echo "<li><code>DB_HOST</code>: " . htmlspecialchars($this->host) . "</li>";
-                echo "<li><code>DB_PORT</code>: " . htmlspecialchars((string)$this->port) . "</li>";
-                echo "<li><code>DB_USER</code>: " . htmlspecialchars($this->username) . "</li>";
-                echo "<li><code>DB_PASSWORD</code>: " . (!empty($this->password) ? "•••••••• (Set)" : "<span style='color:red;font-weight:bold;'>Missing / Empty</span>") . "</li>";
-                echo "<li><code>DB_NAME</code>: " . htmlspecialchars($this->database) . "</li>";
-                echo "<li><code>DB_SSL</code>: " . ($ssl_enabled ? "true" : "false") . "</li>";
-                echo "</ul>";
-                echo "<p>Or provide <code>DATABASE_URL</code> (e.g. <code>mysql://user:pass@host:port/dbname</code>).</p>";
-                echo "</div>";
-                exit;
-            }
+        $this->conn->set_charset("utf8mb4");
+        @$this->conn->query("SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'");
 
-            $this->conn->set_charset("utf8mb4");
-            @$this->conn->query("SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION'");
+        self::$shared_conn = $this->conn;
 
-            // Auto seed database if tables are missing
-            $this->auto_seed_if_empty();
-        }    
+        // Auto seed database if tables are missing
+        $this->auto_seed_if_empty();
     }
 
     private function auto_seed_if_empty(){
+        if (self::$is_seeded) return;
+        self::$is_seeded = true;
+
         try {
             $check = $this->conn->query("SHOW TABLES LIKE 'system_info'");
-            if ($check && $check->num_rows == 0) {
-                $sql_file = defined('base_app') ? base_app . 'database/mvogms_db.sql' : __DIR__ . '/../database/mvogms_db.sql';
-                if (file_exists($sql_file)) {
-                    $sql_content = file_get_contents($sql_file);
-                    $lines = explode("\n", $sql_content);
-                    $clean_sql = "";
-                    foreach ($lines as $line) {
-                        $trimmed = trim($line);
-                        if (str_starts_with($trimmed, "--") || str_starts_with($trimmed, "/*") || str_starts_with($trimmed, "SET SQL_MODE") || str_starts_with($trimmed, "START TRANSACTION") || str_starts_with($trimmed, "COMMIT;")) {
-                            continue;
-                        }
-                        $clean_sql .= $line . "\n";
-                    }
-
-                    $queries = explode(";\n", $clean_sql);
-                    foreach ($queries as $q) {
-                        $q = trim($q);
-                        if (!empty($q)) {
-                            @$this->conn->query($q);
-                        }
-                    }
-                }
-            }
-            if ($check && is_object($check)) {
+            if ($check && $check->num_rows > 0) {
                 $check->free();
+                return;
+            }
+            if ($check) $check->free();
+
+            $sql_file = defined('base_app') ? base_app . 'database/mvogms_db.sql' : __DIR__ . '/../database/mvogms_db.sql';
+            if (file_exists($sql_file)) {
+                $sql = file_get_contents($sql_file);
+                @$this->conn->query("SET FOREIGN_KEY_CHECKS = 0");
+                if ($this->conn->multi_query($sql)) {
+                    do {
+                        if ($res = $this->conn->store_result()) {
+                            $res->free();
+                        }
+                    } while ($this->conn->more_results() && $this->conn->next_result());
+                }
+                @$this->conn->query("SET FOREIGN_KEY_CHECKS = 1");
             }
         } catch (Throwable $e) {
             error_log("Auto-seed notice: " . $e->getMessage());
@@ -122,9 +127,7 @@ class DBConnection{
     }
 
     public function __destruct(){
-        if ($this->conn) {
-            $this->conn->close();
-        }
+        // Connection pooled, do not close prematurely
     }
 }
 ?>
